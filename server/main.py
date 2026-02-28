@@ -1,14 +1,26 @@
 import os
 import json
-from fastapi import FastAPI, Query, File, UploadFile, Depends
+import re
+from fastapi import FastAPI, Query, File, UploadFile, Depends, HTTPException
 from sqlalchemy.orm import Session
 from PyPDF2 import PdfReader
 import docx  
-import openpyxl  
-
+import openpyxl
+from fastapi.middleware.cors import CORSMiddleware
 from database import SessionLocal, Documento, Usuario, get_db
+from groq import Groq 
 
-app = FastAPI(title="Gestor Documental API")
+app = FastAPI(title="Sardiñas na Nube AI API")
+
+client_ai = Groq(api_key="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")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -31,101 +43,122 @@ async def importar_documento(file: UploadFile = File(...), db: Session = Depends
     nombre_partes = file.filename.split(".")
     extension = nombre_partes[-1].lower() if len(nombre_partes) > 1 else "sin_extension"
     
-    metadatos = {
-        "tamano_bytes": len(contenido),
-        "extension": extension
-    }
-    
     try:
         if extension == "pdf":
             reader = PdfReader(ruta_guardado)
-            metadatos["num_paginas"] = len(reader.pages)
-            if reader.metadata:
-                metadatos["autor"] = reader.metadata.get("/Author", "Desconocido")
             for page in reader.pages:
-                texto_extraido += page.extract_text() + "\n"
-
+                texto_extraido += (page.extract_text() or "") + "\n"
         elif extension in ["doc", "docx"]:
             doc = docx.Document(ruta_guardado)
-            metadatos["autor"] = doc.core_properties.author or "Desconocido"
-            metadatos["fecha_creacion"] = str(doc.core_properties.created)
             for para in doc.paragraphs:
                 texto_extraido += para.text + "\n"
-
         elif extension in ["xls", "xlsx"]:
             wb = openpyxl.load_workbook(ruta_guardado, data_only=True)
-            metadatos["hojas"] = wb.sheetnames
-            metadatos["autor"] = wb.properties.creator or "Desconocido"
             for sheet in wb.worksheets:
                 for row in sheet.iter_rows(values_only=True):
-                    fila_texto = " ".join([str(cell) for cell in row if cell is not None])
-                    if fila_texto:
-                        texto_extraido += fila_texto + "\n"
-                        
-        elif extension in ["txt", "csv", "md", "json", "html", "py"]:
+                    texto_extraido += " ".join([str(c) for c in row if c is not None]) + "\n"
+        elif extension in ["txt", "csv", "md"]:
             with open(ruta_guardado, "r", encoding="utf-8", errors="ignore") as f:
                 texto_extraido = f.read()
-                
-        else:
-            metadatos["nota"] = "Archivo guardado correctamente. Formato no procesable para leer texto interno."
-
     except Exception as e:
-        
-        metadatos["error_extraccion"] = f"No se pudo extraer texto: {str(e)}"
+        print(f"Error extrayendo texto: {e}")
 
-    nuevo_documento = Documento(
+    metadatos = {
+        "tamano_bytes": len(contenido),
+        "extension": extension,
+        "categoria": "General" 
+    }
+
+    texto_min = texto_extraido.lower()
+    
+    if texto_extraido.strip():
+        try:
+            prompt_cat = f"Clasifica este texto en UNA sola palabra de estas categorías (Finanzas, Legal, RRHH, Proyectos, Charlas, General): {texto_extraido[:800]}"
+            res_cat = client_ai.chat.completions.create(
+                messages=[{"role": "user", "content": prompt_cat}],
+                model="llama3-8b-8192",
+            )
+            categoria_sugerida = res_cat.choices[0].message.content.strip().title()
+            if categoria_sugerida in ["Finanzas", "Legal", "Rrhh", "Proyectos", "Charlas"]:
+                metadatos["categoria"] = "RRHH" if categoria_sugerida == "Rrhh" else categoria_sugerida
+        except Exception as e:
+            if any(p in texto_min for p in ["factura", "presupuesto", "€"]): metadatos["categoria"] = "Finanzas"
+            elif any(p in texto_min for p in ["contrato", "ley"]): metadatos["categoria"] = "Legal"
+            elif any(p in texto_min for p in ["charla", "ponencia"]): metadatos["categoria"] = "Charlas"
+
+    nuevo_doc = Documento(
         nombre_archivo=file.filename,
         ruta_archivo=ruta_guardado,
         contenido_texto=texto_extraido,
         metadatos=json.dumps(metadatos), 
         user_id=usuario.id
     )
-    
-    db.add(nuevo_documento)
+    db.add(nuevo_doc)
     db.commit()
-    db.refresh(nuevo_documento)
+    db.refresh(nuevo_doc)
+    return {"mensaje": "OK", "id": nuevo_doc.id}
 
-    return {
-        "mensaje": "Documento procesado e importado",
-        "documento_id": nuevo_documento.id,
-        "metadatos_extraidos": metadatos
-    }
+@app.get("/documentos/{doc_id}/resumir")
+async def resumir_documento(doc_id: int, db: Session = Depends(get_db)):
+    doc = db.query(Documento).filter(Documento.id == doc_id).first()
+    if not doc or not doc.contenido_texto:
+        raise HTTPException(status_code=404, detail="Documento no encontrado o sin texto legible")
+
+    try:
+        prompt_res = f"Resume este documento en 3 puntos clave muy directos. Usa emojis corporativos. Sé breve: {doc.contenido_texto[:3500]}"
+        
+        completion = client_ai.chat.completions.create(
+            messages=[{"role": "user", "content": prompt_res}],
+            model="llama-3.1-8b-instant",
+        )
+        return {"resumen": completion.choices[0].message.content}
+    except Exception as e:
+        return {"resumen": f"⚠️ Error al conectar con el cerebro de IA: {str(e)}"}
 
 @app.get("/documentos/")
 def buscar_y_navegar(
     query: str = None, 
-    skip: int = Query(0, description="Paginación: cuántos saltar"), 
-    limit: int = Query(10, description="Paginación: cuántos devolver"),
+    categoria: str = None, 
+    skip: int = Query(0), 
+    limit: int = Query(10),
     db: Session = Depends(get_db)
 ):
-    """
-    Este endpoint hace la magia de buscar, paginar y devolver metadatos.
-    """
     consulta = db.query(Documento)
     
     if query:
-        termino_busqueda = f"%{query}%"
-        consulta = consulta.filter(
-            (Documento.nombre_archivo.like(termino_busqueda)) | 
-            (Documento.contenido_texto.like(termino_busqueda))
-        )
+        termino = f"%{query}%"
+        consulta = consulta.filter((Documento.nombre_archivo.like(termino)) | (Documento.contenido_texto.like(termino)))
+    
+    if categoria and categoria != "Todas":
+        consulta = consulta.filter(Documento.metadatos.like(f'%"categoria": "{categoria}"%'))
         
-    total_resultados = consulta.count()
+    total = consulta.count()
     resultados = consulta.offset(skip).limit(limit).all()
     
-    documentos_formateados = []
+    final = []
     for doc in resultados:
-        metadatos_dict = json.loads(doc.metadatos) if doc.metadatos else {}
+        m = json.loads(doc.metadatos)
+        frags = []
+        coincidencias = 0
         
-        documentos_formateados.append({
+        if doc.contenido_texto and query:
+            clean = doc.contenido_texto.replace('\n', ' ')
+            matches = list(re.finditer(query, clean, re.IGNORECASE))
+            coincidencias = len(matches)
+            for match in matches[:5]:
+                start, end = max(0, match.start() - 45), min(len(clean), match.end() + 45)
+                frags.append(clean[start:end])
+        
+        final.append({
             "id": doc.id,
             "nombre_archivo": doc.nombre_archivo,
-            "metadatos": metadatos_dict, 
-            "fragmento": doc.contenido_texto[:150] + "..." if doc.contenido_texto else "Sin contenido legible."
+            "metadatos": m, 
+            "fragmentos": frags,
+            "coincidencias": coincidencias 
         })
         
     return {
-        "total_encontrados": total_resultados,
+        "total_encontrados": total,
         "pagina_actual": (skip // limit) + 1,
-        "resultados": documentos_formateados
+        "resultados": final
     }
