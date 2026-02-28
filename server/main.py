@@ -17,7 +17,7 @@ from groq import Groq
 app = FastAPI(title="Sardiñas na Nube Enterprise AI")
 
 MODELO_RAPIDO = "llama-3.1-8b-instant"
-MODELO_PRO = "llama-3.3-70b-versatile" # Sucesor del 70b-versatile
+MODELO_PRO = "llama-3.3-70b-versatile" 
 
 client_ai = Groq(api_key="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")
 
@@ -36,12 +36,17 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 def normalizar_texto(texto: str) -> str:
     if not texto: return ""
     texto = unicodedata.normalize("NFD", texto)
-    texto = texto.encode("ascii", "ignore").decode("utf-8")
-    return texto.lower()
+    return texto.encode("ascii", "ignore").decode("utf-8").lower()
 
 @app.post("/importar/")
 async def importar_documento(file: UploadFile = File(...), db: Session = Depends(get_db)):
     usuario = db.query(Usuario).first()
+    if not usuario:
+        usuario = Usuario(username="admin", email="admin@demo.com", password_hash="1234")
+        db.add(usuario)
+        db.commit()
+        db.refresh(usuario)
+
     ruta_guardado = os.path.join(UPLOAD_DIR, file.filename)
     with open(ruta_guardado, "wb") as buffer:
         contenido = await file.read()
@@ -53,8 +58,7 @@ async def importar_documento(file: UploadFile = File(...), db: Session = Depends
     try:
         if extension == "pdf":
             reader = PdfReader(ruta_guardado)
-            for page in reader.pages:
-                texto_extraido += (page.extract_text() or "") + "\n"
+            texto_extraido = "\n".join([page.extract_text() or "" for page in reader.pages])
         elif extension in ["doc", "docx"]:
             doc = docx.Document(ruta_guardado)
             texto_extraido = "\n".join([p.text for p in doc.paragraphs])
@@ -64,21 +68,18 @@ async def importar_documento(file: UploadFile = File(...), db: Session = Depends
                 for row in sheet.iter_rows(values_only=True):
                     texto_extraido += " ".join([str(c) for c in row if c is not None]) + "\n"
     except Exception as e:
-        print("Error extrayendo texto:", e)
+        print("Error extracción:", e)
 
     categoria_final = "General"
     if len(texto_extraido) > 100:
         longitud = len(texto_extraido)
-        inicio = texto_extraido[:1200]
-        mitad = texto_extraido[longitud//2 - 600 : longitud//2 + 600] if longitud > 2000 else ""
-        final = texto_extraido[-1200:]
-        muestreo = f"{inicio}\n[...]\n{mitad}\n[...]\n{final}"
+        muestreo = f"{texto_extraido[:1200]}\n[...]\n{texto_extraido[longitud//2-500:longitud//2+500]}\n[...]\n{texto_extraido[-1200:]}"
         
         try:
-            prompt_cat = f"Clasifica este documento en una sola palabra: Finanzas, Legal, RRHH, Proyectos o Charlas. Responde SOLO la palabra:\n\n{muestreo}"
+            prompt_cat = f"Clasifica en una palabra (Finanzas, Legal, RRHH, Proyectos, Charlas): {muestreo}"
             res_cat = client_ai.chat.completions.create(
                 messages=[{"role": "user", "content": prompt_cat}], 
-                model=MODELO_RAPIDO     categoria_final = "General"
+                model=MODELO_RAPIDO
             )
             sugerencia = res_cat.choices[0].message.content.strip().title()
             if sugerencia in ["Finanzas", "Legal", "Rrhh", "Proyectos", "Charlas"]:
@@ -100,13 +101,31 @@ async def importar_documento(file: UploadFile = File(...), db: Session = Depends
     db.refresh(nuevo_doc)
     return {"mensaje": "OK", "id": nuevo_doc.id}
 
+@app.put("/documentos/{doc_id}")
+async def actualizar_documento(doc_id: int, payload: dict, db: Session = Depends(get_db)):
+    doc = db.query(Documento).filter(Documento.id == doc_id).first()
+    if not doc: raise HTTPException(status_code=404)
+    
+    if "nombre_archivo" in payload:
+        doc.nombre_archivo = payload["nombre_archivo"]
+        doc.nombre_normalizado = normalizar_texto(payload["nombre_archivo"])
+    if "contenido_texto" in payload:
+        doc.contenido_texto = payload["contenido_texto"]
+        doc.contenido_normalizado = normalizar_texto(payload["contenido_texto"])
+    if "categoria" in payload:
+        m = json.loads(doc.metadatos)
+        m["categoria"] = payload["categoria"]
+        doc.metadatos = json.dumps(m)
+        
+    db.commit()
+    return {"status": "success"}
+
 @app.get("/documentos/")
 def buscar_y_navegar(query: str = None, categoria: str = None, skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     consulta = db.query(Documento)
     if query:
-        query_norm = normalizar_texto(query)
-        consulta = consulta.filter((Documento.nombre_normalizado.like(f"%{query_norm}%")) | (Documento.contenido_normalizado.like(f"%{query_norm}%")))
-    
+        q_norm = normalizar_texto(query)
+        consulta = consulta.filter((Documento.nombre_normalizado.like(f"%{q_norm}%")) | (Documento.contenido_normalizado.like(f"%{q_norm}%")))
     if categoria and categoria != "Todas":
         consulta = consulta.filter(Documento.metadatos.like(f'%"{categoria}"%'))
 
@@ -117,45 +136,32 @@ def buscar_y_navegar(query: str = None, categoria: str = None, skip: int = 0, li
         m = json.loads(doc.metadatos)
         frags = []
         if doc.contenido_texto and query:
-            clean_original = doc.contenido_texto.replace("\n", " ")
-            clean_norm = normalizar_texto(clean_original)
-            query_norm = normalizar_texto(query)
-            matches = list(re.finditer(re.escape(query_norm), clean_norm))
+            clean_n = normalizar_texto(doc.contenido_texto.replace("\n", " "))
+            clean_o = doc.contenido_texto.replace("\n", " ")
+            matches = list(re.finditer(re.escape(normalizar_texto(query)), clean_n))
             for match in matches:
-                start, end = max(0, match.start() - 50), min(len(clean_original), match.end() + 50)
-                frags.append(clean_original[start:end])
+                start, end = max(0, match.start() - 50), min(len(clean_o), match.end() + 50)
+                frags.append(clean_o[start:end])
 
         final.append({
             "id": doc.id, "nombre_archivo": doc.nombre_archivo, "metadatos": m,
-            "fragmentos": frags, "coincidencias": len(frags)
+            "fragmentos": frags, "coincidencias": len(frags), "texto_completo": doc.contenido_texto
         })
     return {"total_encontrados": total, "pagina_actual": (skip // limit) + 1, "resultados": final}
 
 @app.get("/documentos/{doc_id}/resumir")
 async def resumir_documento(doc_id: int, db: Session = Depends(get_db)):
     doc = db.query(Documento).filter(Documento.id == doc_id).first()
-    if not doc or not doc.contenido_texto:
-        raise HTTPException(status_code=404, detail="Sin contenido")
-    
-    prompt_res = f"Analiza este documento y resume los 3 puntos más importantes con emojis corporativos:\n{doc.contenido_texto[:4000]}"
+    prompt = f"Resume este documento corporativo en 3 puntos clave con emojis:\n{doc.contenido_texto[:4500]}"
     try:
-        completion = client_ai.chat.completions.create(
-            messages=[{"role": "user", "content": prompt_res}],
-            model=MODELO_PRO, 
-        )
-        return {"resumen": completion.choices[0].message.content}
-    except Exception as e:
-        return {"resumen": f"Error de conexión con la IA: {str(e)}"}
+        res = client_ai.chat.completions.create(messages=[{"role": "user", "content": prompt}], model=MODELO_PRO)
+        return {"resumen": res.choices[0].message.content}
+    except Exception as e: return {"resumen": f"Error IA: {str(e)}"}
 
 @app.delete("/documentos/{doc_id}")
 async def eliminar_documento(doc_id: int, db: Session = Depends(get_db)):
     doc = db.query(Documento).filter(Documento.id == doc_id).first()
-    if not doc:
-        raise HTTPException(status_code=404, detail="No encontrado")
-    
-    if os.path.exists(doc.ruta_archivo):
-        os.remove(doc.ruta_archivo)
-    
+    if os.path.exists(doc.ruta_archivo): os.remove(doc.ruta_archivo)
     db.delete(doc)
     db.commit()
-    return {"mensaje": "Eliminado"}
+    return {"mensaje": "OK"}

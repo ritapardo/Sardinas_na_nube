@@ -85,7 +85,7 @@ onMounted(() => buscarDocumentos())
         <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-200 sticky top-8">
           <div class="flex items-center gap-3 mb-8 cursor-pointer" @click="queryBusqueda=''; seleccionarCarpeta('Todas')">
             <svg class="w-10 h-10 text-blue-600" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z"/></svg>
-            <h1 class="text-xl font-black">Sardiñas <span class="text-blue-600">Enterprise</span></h1>
+            <h1 class="text-xl font-black">Sardiñas <span class="text-blue-600">na nube</span></h1>
           </div>
           <label for="fileInput" class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-200 rounded-2xl cursor-pointer bg-gray-50 hover:bg-blue-50 hover:border-blue-300 transition-all text-center px-4">
               <p class="text-[10px] text-gray-400 font-bold truncate">{{ archivoSeleccionado ? archivoSeleccionado.name : 'Arrastra o haz click' }}</p>
