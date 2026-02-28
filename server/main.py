@@ -16,7 +16,6 @@ from groq import Groq
 
 app = FastAPI(title="Sardiñas na Nube Enterprise AI")
 
-# 🔥 MODELOS ACTUALIZADOS (Enero/Febrero 2026)
 MODELO_RAPIDO = "llama-3.1-8b-instant"
 MODELO_PRO = "llama-3.3-70b-versatile" # Sucesor del 70b-versatile
 
@@ -32,7 +31,6 @@ app.add_middleware(
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-# 🔥 Montar carpeta para previsualización
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 def normalizar_texto(texto: str) -> str:
@@ -41,9 +39,6 @@ def normalizar_texto(texto: str) -> str:
     texto = texto.encode("ascii", "ignore").decode("utf-8")
     return texto.lower()
 
-# =============================
-# IMPORTAR DOCUMENTO (CON MUESTREO ENTERPRISE)
-# =============================
 @app.post("/importar/")
 async def importar_documento(file: UploadFile = File(...), db: Session = Depends(get_db)):
     usuario = db.query(Usuario).first()
@@ -71,7 +66,6 @@ async def importar_documento(file: UploadFile = File(...), db: Session = Depends
     except Exception as e:
         print("Error extrayendo texto:", e)
 
-    # 🔥 ESTRATEGIA DE MUESTREO: IA lee inicio, medio y final
     categoria_final = "General"
     if len(texto_extraido) > 100:
         longitud = len(texto_extraido)
@@ -84,7 +78,7 @@ async def importar_documento(file: UploadFile = File(...), db: Session = Depends
             prompt_cat = f"Clasifica este documento en una sola palabra: Finanzas, Legal, RRHH, Proyectos o Charlas. Responde SOLO la palabra:\n\n{muestreo}"
             res_cat = client_ai.chat.completions.create(
                 messages=[{"role": "user", "content": prompt_cat}], 
-                model=MODELO_RAPIDO # El 8b es perfecto para clasificar rápido
+                model=MODELO_RAPIDO     categoria_final = "General"
             )
             sugerencia = res_cat.choices[0].message.content.strip().title()
             if sugerencia in ["Finanzas", "Legal", "Rrhh", "Proyectos", "Charlas"]:
@@ -106,9 +100,6 @@ async def importar_documento(file: UploadFile = File(...), db: Session = Depends
     db.refresh(nuevo_doc)
     return {"mensaje": "OK", "id": nuevo_doc.id}
 
-# =============================
-# BUSCAR (EXHAUSTIVO Y NORMALIZADO)
-# =============================
 @app.get("/documentos/")
 def buscar_y_navegar(query: str = None, categoria: str = None, skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     consulta = db.query(Documento)
@@ -129,7 +120,6 @@ def buscar_y_navegar(query: str = None, categoria: str = None, skip: int = 0, li
             clean_original = doc.contenido_texto.replace("\n", " ")
             clean_norm = normalizar_texto(clean_original)
             query_norm = normalizar_texto(query)
-            # 🔥 Encontrar TODAS las coincidencias
             matches = list(re.finditer(re.escape(query_norm), clean_norm))
             for match in matches:
                 start, end = max(0, match.start() - 50), min(len(clean_original), match.end() + 50)
@@ -141,9 +131,6 @@ def buscar_y_navegar(query: str = None, categoria: str = None, skip: int = 0, li
         })
     return {"total_encontrados": total, "pagina_actual": (skip // limit) + 1, "resultados": final}
 
-# =============================
-# RESUMEN IA (MODELO CORREGIDO)
-# =============================
 @app.get("/documentos/{doc_id}/resumir")
 async def resumir_documento(doc_id: int, db: Session = Depends(get_db)):
     doc = db.query(Documento).filter(Documento.id == doc_id).first()
@@ -154,15 +141,12 @@ async def resumir_documento(doc_id: int, db: Session = Depends(get_db)):
     try:
         completion = client_ai.chat.completions.create(
             messages=[{"role": "user", "content": prompt_res}],
-            model=MODELO_PRO, # Usamos el 3.3-70b-versatile
+            model=MODELO_PRO, 
         )
         return {"resumen": completion.choices[0].message.content}
     except Exception as e:
         return {"resumen": f"Error de conexión con la IA: {str(e)}"}
 
-# =============================
-# ELIMINAR (FÍSICO Y LÓGICO)
-# =============================
 @app.delete("/documentos/{doc_id}")
 async def eliminar_documento(doc_id: int, db: Session = Depends(get_db)):
     doc = db.query(Documento).filter(Documento.id == doc_id).first()
