@@ -3,6 +3,8 @@ import json
 from fastapi import FastAPI, Query, File, UploadFile, Depends
 from sqlalchemy.orm import Session
 from PyPDF2 import PdfReader
+import docx  
+import openpyxl  
 
 from database import SessionLocal, Documento, Usuario, get_db
 
@@ -26,23 +28,50 @@ async def importar_documento(file: UploadFile = File(...), db: Session = Depends
         buffer.write(contenido)
     
     texto_extraido = ""
+    nombre_partes = file.filename.split(".")
+    extension = nombre_partes[-1].lower() if len(nombre_partes) > 1 else "sin_extension"
+    
     metadatos = {
         "tamano_bytes": len(contenido),
-        "extension": file.filename.split(".")[-1]
+        "extension": extension
     }
     
     try:
-        reader = PdfReader(ruta_guardado)
-        metadatos["num_paginas"] = len(reader.pages)
-        
-        if reader.metadata:
-            metadatos["autor"] = reader.metadata.get("/Author", "Desconocido")
-            
-        for page in reader.pages:
-            texto_extraido += page.extract_text() + "\n"
-            
+        if extension == "pdf":
+            reader = PdfReader(ruta_guardado)
+            metadatos["num_paginas"] = len(reader.pages)
+            if reader.metadata:
+                metadatos["autor"] = reader.metadata.get("/Author", "Desconocido")
+            for page in reader.pages:
+                texto_extraido += page.extract_text() + "\n"
+
+        elif extension in ["doc", "docx"]:
+            doc = docx.Document(ruta_guardado)
+            metadatos["autor"] = doc.core_properties.author or "Desconocido"
+            metadatos["fecha_creacion"] = str(doc.core_properties.created)
+            for para in doc.paragraphs:
+                texto_extraido += para.text + "\n"
+
+        elif extension in ["xls", "xlsx"]:
+            wb = openpyxl.load_workbook(ruta_guardado, data_only=True)
+            metadatos["hojas"] = wb.sheetnames
+            metadatos["autor"] = wb.properties.creator or "Desconocido"
+            for sheet in wb.worksheets:
+                for row in sheet.iter_rows(values_only=True):
+                    fila_texto = " ".join([str(cell) for cell in row if cell is not None])
+                    if fila_texto:
+                        texto_extraido += fila_texto + "\n"
+                        
+        elif extension in ["txt", "csv", "md", "json", "html", "py"]:
+            with open(ruta_guardado, "r", encoding="utf-8", errors="ignore") as f:
+                texto_extraido = f.read()
+                
+        else:
+            metadatos["nota"] = "Archivo guardado correctamente. Formato no procesable para leer texto interno."
+
     except Exception as e:
-        return {"error": f"Hubo un problema leyendo el PDF: {str(e)}"}
+        
+        metadatos["error_extraccion"] = f"No se pudo extraer texto: {str(e)}"
 
     nuevo_documento = Documento(
         nombre_archivo=file.filename,
@@ -57,7 +86,7 @@ async def importar_documento(file: UploadFile = File(...), db: Session = Depends
     db.refresh(nuevo_documento)
 
     return {
-        "mensaje": "Documento importado correctamente",
+        "mensaje": "Documento procesado e importado",
         "documento_id": nuevo_documento.id,
         "metadatos_extraidos": metadatos
     }
@@ -82,7 +111,6 @@ def buscar_y_navegar(
         )
         
     total_resultados = consulta.count()
-    
     resultados = consulta.offset(skip).limit(limit).all()
     
     documentos_formateados = []
