@@ -1,0 +1,31 @@
+# ¿Cómo ejecutar el código?
+  1. Debemos, en este caso, clonar el repositorio en cuestión -> es decir, aplicar: git clone "(https o ssh)", siempre una vez se haya iniciado sesión en GitHub.
+  2. Luego, deberemos ejecutar por separado el backend y el frontend:
+     2.1. Backend (se realiza sobre el directorio server):
+         2.1.1. Deberemos crear y entrar dentro del entorno, para el que aplicaremos los siguientes comandos en terminal:
+                  python3 -m venv venv
+                  source venv/bin/activate
+         2.1.2. Despúes de crear el entorno y meternos dentro de él, deberemos instalar ciertas librerias para que funcione el proyecto (en el caso de que no este instalada de antemano).
+                  pip install fastapi uvicorn sqlalchemy pypdf2 python-multipart
+                  pip install python.docx
+                  pip install openpyxl mammoth beautifulsoup4
+                  pip install groq
+         2.1.3. Para poder ejecutar el backend, aplicaremos el siguiente comando en terminal (obligatorio para cada vez que se quiera usar el backend):
+                  uvicorn main:app --reload
+                
+    2.2. Frontend (se realiza sobre el directorio cliente):
+         2.2.1. Primero, debemos instalar una librería (en el caso de no tenerla instalada de antes).
+                  npm install
+         2.2.2. Luego, para poder ejecutar el frontend, debemos realizar el siguiente comando en terminal.
+                  npm run dev
+                  
+  3. A partir de aquí, podremos usar nuestro proyecto.
+
+  # Contribuciones de los participantes.
+    Este proyecto ha sido diseñado, desarrollado e integrado en un plazo intensivo de 36 horas por un equipo reducido de 4 personas, bajo un enfoque de alta productividad, decisiones técnicas rápidas y fuerte cohesión de equipo.
+    Debido a este contexto:
+      · El código prioriza funcionalidad, claridad y extensibilidad.
+      · Algunas decisiones técnicas responden a restricciones temporales conscientes.
+      · El proyecto está abierto a mejoras, refactorizaciones y optimización progresiva.
+
+Las contribuciones externas son bienvenidas siempre que respeten el marco técnico, legal y ético definido.
