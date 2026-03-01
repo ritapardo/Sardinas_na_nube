@@ -27,7 +27,7 @@ const carpetas = [
   { nombre: 'Legal', color: 'bg-red-100 text-red-600', svg: '<path d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 01-6.001 0M18 7l-3 9m3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />' },
   { nombre: 'RRHH', color: 'bg-orange-100 text-orange-600', svg: '<path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />' },
   { nombre: 'Proyectos', color: 'bg-indigo-100 text-indigo-600', svg: '<path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />' },
-  { nombre: 'Charlas', color: 'bg-purple-100 text-purple-600', svg: '<path d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />' }
+  { nombre: 'Software', color: 'bg-purple-100 text-purple-600', svg: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />' }
 ]
 
 const buscarDocumentos = async (reset = false) => {
@@ -68,14 +68,24 @@ const guardarCambios = async () => {
     payload.excel_grid = docEnEdicion.value.metadatos.excel_grid;
   }
 
+  if (docEnEdicion.value.metadatos.html_preview) {
+    const editorEl = document.querySelector('.docx-render-container');
+    if (editorEl) {
+      payload.html_preview = editorEl.innerHTML;     
+      payload.contenido_texto = editorEl.innerText;  
+    }
+  }
+
   const res = await fetch(`${API_URL}/documentos/${docEnEdicion.value.id}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
 
   if (res.ok) {
-    const data = await res.json(); alert(`Guardado. Categoría IA: ${data.nueva_categoria}`);
-    modalVisible.value = false; buscarDocumentos(true);
+    const data = await res.json(); 
+    alert(`Guardado. Categoría IA: ${data.nueva_categoria}`);
+    modalVisible.value = false; 
+    buscarDocumentos(true);
   }
 }
 
@@ -100,9 +110,25 @@ const subirDocumento = async () => {
 const eliminarDocumento = async (id) => { if(confirm("¿Eliminar?")) { await fetch(`${API_URL}/documentos/${id}`, {method:'DELETE'}); buscarDocumentos() } }
 
 const generarResumen = async (id) => {
-  resumienDocId.value = id; resumenTexto.value = "Analizando..."; cargandoResumen.value = true
-  const res = await fetch(`${API_URL}/documentos/${id}/resumir`); const data = await res.json()
-  resumenTexto.value = data.resumen; cargandoResumen.value = false
+  if (resumienDocId.value === id) {
+    resumienDocId.value = null;
+    resumenTexto.value = "";
+    return;
+  }
+
+  resumienDocId.value = id; 
+  resumenTexto.value = "🤖 Analizando..."; 
+  cargandoResumen.value = true;
+  
+  try {
+    const res = await fetch(`${API_URL}/documentos/${id}/resumir`); 
+    const data = await res.json();
+    resumenTexto.value = data.resumen;
+  } catch (error) {
+    resumenTexto.value = "Error al generar el resumen.";
+  } finally {
+    cargandoResumen.value = false;
+  }
 }
 
 const seleccionarCarpeta = (n) => { categoriaSeleccionada.value = n; buscarDocumentos(true) }
@@ -160,15 +186,19 @@ onMounted(() => buscarDocumentos())
                     <span class="text-[9px] font-black uppercase text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100 shadow-sm">{{ doc.metadatos.categoria }}</span>
                     <span class="text-[10px] text-gray-500 font-bold flex items-center gap-1">
                     <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/></svg> {{ doc.autor }}</span>
+                    <span class="text-[10px] text-gray-500 font-bold flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                        {{ doc.fecha }}
+                    </span>
                     <span class="text-[10px] text-gray-400 font-bold italic">Coincidencias: {{ doc.coincidencias }}</span>
                 </div>
               </div>
               <div class="flex gap-2">
                 <button @click="abrirLector(doc)" class="p-3 bg-gray-50 text-gray-600 rounded-2xl hover:bg-gray-200 transition-colors" title="Ver / Editar"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg></button>
                 <button @click="descargarArchivo(doc.id)" class="p-3 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-100 transition-colors" title="Descargar"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="m12 16l-5-5l1.4-1.45l2.6 2.6V4h2v8.15l2.6-2.6L17 11zm-6 4q-.825 0-1.412-.587T4 18v-3h2v3h12v-3h2v3q0 .825-.587 1.413T18 20z"/></svg></button>
-                <button @click="generarResumen(doc.id)" class="px-5 py-3 bg-purple-50 text-purple-600 rounded-2xl font-bold text-xs hover:bg-purple-100 flex items-center gap-2 border border-purple-100 shadow-sm transition-all">
-                    <span v-if="cargandoResumen && resumienDocId === doc.id" class="animate-spin w-3 h-3 border-2 border-purple-600 border-t-transparent rounded-full"></span>
-                    Resumen IA
+                <button @click="generarResumen(doc.id)" :class="resumienDocId === doc.id ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-600'" class="px-5 py-3 rounded-2xl font-bold text-xs hover:bg-purple-100 flex items-center gap-2 border border-purple-100 shadow-sm transition-all">
+                    <span v-if="cargandoResumen && resumienDocId === doc.id" class="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full"></span>
+                    {{ resumienDocId === doc.id && !cargandoResumen ? 'Ocultar Resumen' : 'Resumen IA' }}
                 </button>
                 <button @click="eliminarDocumento(doc.id)" class="p-3 bg-red-50 text-red-400 rounded-2xl hover:bg-red-100 transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
               </div>
@@ -187,7 +217,6 @@ onMounted(() => buscarDocumentos())
                   class="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 transition-colors">
                 Mostrar más coincidencias (+{{ Math.min(10, doc.fragmentos.length - fragmentosVisibles[doc.id]) }}) ↓
                 </button>
-    
                 <span class="text-[9px] font-bold text-gray-400 uppercase">
                   Viendo {{ Math.min(fragmentosVisibles[doc.id], doc.fragmentos.length) }} de {{ doc.fragmentos.length }}
                 </span>
@@ -195,7 +224,7 @@ onMounted(() => buscarDocumentos())
             </div>
 
             <div v-if="resumienDocId === doc.id" class="p-6 bg-gradient-to-br from-purple-50 to-white rounded-2xl border border-purple-100 shadow-inner mt-4">
-                <p class="text-sm text-purple-900 leading-loose whitespace-pre-wrap font-medium">{{ resumenTexto }}</p>
+                <p class="text-sm text-purple-900 leading-loose whitespace-pre-wrap font-medium italic">{{ resumenTexto }}</p>
             </div>
           </div>
         </div>
@@ -262,10 +291,17 @@ onMounted(() => buscarDocumentos())
 
                   <div v-else class="w-full h-full p-8 overflow-y-auto flex justify-center bg-gray-100/30">
                       <div class="bg-white shadow-xl w-full max-w-2xl min-h-full p-12 font-serif text-gray-800 whitespace-pre-wrap text-sm leading-relaxed relative">
-                          <div v-if="docEnEdicion.metadatos.extension.toLowerCase().includes('doc')" class="mb-6 p-4 bg-yellow-50 text-yellow-800 text-xs rounded-xl border border-yellow-200">
-                              ⚠️ <b>Aviso:</b> Estás en desarrollo local. Viendo el texto base extraído del Word.
-                          </div>
+                        
+                        <div v-if="docEnEdicion.metadatos.html_preview" 
+                          v-html="docEnEdicion.metadatos.html_preview" 
+                          :contenteditable="modoEdicion"
+                          class="docx-render-container transition-all outline-none"
+                          :class="{'ring-4 ring-blue-400 bg-blue-50/50 p-6 rounded-2xl shadow-lg': modoEdicion}">
+                        </div>
+
+                        <div v-else class="whitespace-pre-wrap text-sm leading-relaxed">
                           {{ docEnEdicion.texto_completo || 'Este documento parece estar vacío o es ilegible.' }}
+                        </div>
                       </div>
                   </div>
               </div>
@@ -279,6 +315,7 @@ onMounted(() => buscarDocumentos())
                   </button>
               </div>
               <div class="flex-1 bg-white rounded-3xl border border-gray-200 shadow-inner p-8 overflow-y-auto">
+                  
                   <div v-if="docEnEdicion.metadatos.extension.toLowerCase().includes('xls')" class="w-full h-full text-sm font-mono text-gray-600 leading-relaxed whitespace-pre-wrap">
                       <template v-for="(hoja, hIdx) in docEnEdicion.metadatos.excel_grid" :key="hIdx">
                           <p class="text-xs text-gray-400 mt-4 mb-1">--- {{ hoja.hoja }} ---</p>
@@ -287,7 +324,15 @@ onMounted(() => buscarDocumentos())
                           </div>
                       </template>
                   </div>
-                  <textarea v-else-if="modoEdicion" v-model="docEnEdicion.texto_completo" class="w-full h-full outline-none text-sm font-mono leading-relaxed resize-none bg-transparent text-gray-800"></textarea>
+                  
+                  <div v-else-if="modoEdicion && docEnEdicion.metadatos.html_preview" class="w-full h-full flex flex-col items-center justify-center text-center text-blue-600 bg-blue-50 p-6 rounded-2xl border-2 border-dashed border-blue-200">
+                    <svg class="w-12 h-12 mb-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                    <p class="font-bold text-lg mb-2">Modo Visual Activo</p>
+                    <p class="text-sm font-medium opacity-80">Edita el texto directamente sobre el folio de la izquierda. Las imágenes y el formato se mantendrán intactos.</p>
+                  </div>
+
+                  <textarea v-else-if="modoEdicion" v-model="docEnEdicion.texto_completo" class="w-full h-full outline-none text-sm font-mono leading-relaxed resize-none bg-transparent text-gray-800 focus:ring-2 focus:ring-blue-100 p-4 rounded-xl"></textarea>
+                  
                   <div v-else class="w-full h-full text-sm text-gray-600 leading-loose whitespace-pre-wrap font-medium" 
                        :class="(docEnEdicion.texto_completo || '').includes('ERROR') ? 'text-red-500 font-bold' : ''">
                       {{ docEnEdicion.texto_completo || 'No se encontró texto.' }}
@@ -305,9 +350,62 @@ onMounted(() => buscarDocumentos())
 
 <style>
 @import 'https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css';
-mark { background-color: #fef08a !important; color: black !important; padding: 0 4px; border-radius: 4px; border-bottom: 2px solid #facc15; }
-.tarjeta-documento { animation: fadeInSlide 0.4s ease-out forwards; }
-@keyframes fadeInSlide { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 10px; }
+
+mark { 
+    background-color: #fef08a !important; 
+    color: black !important; 
+    padding: 0 4px; 
+    border-radius: 4px; 
+    border-bottom: 2px solid #facc15; 
+}
+
+.tarjeta-documento { 
+    animation: fadeInSlide 0.4s ease-out forwards; 
+}
+
+@keyframes fadeInSlide { 
+    from { opacity: 0; transform: translateY(30px); } 
+    to { opacity: 1; transform: translateY(0); } 
+}
+
+::-webkit-scrollbar { 
+    width: 6px; 
+}
+
+::-webkit-scrollbar-thumb { 
+    background: #cbd5e0; 
+    border-radius: 10px; 
+}
+
+.docx-render-container {
+    width: 100%;
+}
+
+.docx-render-container img {
+    max-width: 100% !important;
+    height: auto !important;
+    display: block;
+    margin: 1.5rem auto;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+.docx-render-container p {
+    margin-bottom: 1rem;
+    line-height: 1.6;
+    word-break: break-word;
+}
+
+.docx-render-container h1, 
+.docx-render-container h2,
+.docx-render-container h3 {
+    font-weight: bold;
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: #1a202c;
+}
+
+.docx-render-container img {
+    user-select: none;
+}
 </style>

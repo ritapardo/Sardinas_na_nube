@@ -3,6 +3,9 @@ import json
 import re
 import unicodedata
 import base64
+import mammoth
+from bs4 import BeautifulSoup
+import io
 
 from fastapi import FastAPI, Query, File, UploadFile, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -44,7 +47,7 @@ def normalizar_texto(texto: str) -> str:
 def categorizar_con_ia(texto: str) -> str:
     if not texto or len(texto) < 10: return "General"
     try:
-        prompt = f"Clasifica el siguiente texto OBLIGATORIAMENTE en UNA SOLA PALABRA de esta lista exacta: Finanzas, Legal, RRHH, Proyectos, Charlas, General. NO des explicaciones. NO uses signos de puntuación. Solo la palabra.\n\nTexto:\n{texto[:1500]}"
+        prompt = f"Clasifica el siguiente texto OBLIGATORIAMENTE en UNA SOLA PALABRA de esta lista exacta: Finanzas, Legal, RRHH, Proyectos, Software, General. Si ves código de programación (html, js, python, etc.), responde 'Software'. NO des explicaciones. NO uses signos de puntuación. Solo la palabra.\n\nTexto:\n{texto[:1500]}"
         
         res = client_ai.chat.completions.create(
             messages=[{"role": "user", "content": prompt}], 
@@ -58,11 +61,47 @@ def categorizar_con_ia(texto: str) -> str:
         if "LEGAL" in cat_raw: return "Legal"
         if "RRHH" in cat_raw: return "RRHH"
         if "PROYECTOS" in cat_raw: return "Proyectos"
-        if "CHARLAS" in cat_raw: return "Charlas"
+        if "SOFTWARE" in cat_raw: return "Software"
         
         return "General"
     except: 
         return "General"
+    
+def reconstruir_docx(html_content, ruta_archivo):
+    """Convierte el HTML editado de vuelta a un archivo Word físico con imágenes."""
+    try:
+        nuevo_doc = docx.Document()
+        soup = BeautifulSoup(html_content, 'html.parser')
+        
+        for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'img', 'li']):
+            try:
+                if element.name in ['h1', 'h2', 'h3']:
+                    nuevo_doc.add_heading(element.get_text(), level=int(element.name[1]))
+                    
+                elif element.name == 'p':
+                    texto = element.get_text().strip()
+                    if texto:
+                        nuevo_doc.add_paragraph(texto)
+                        
+                elif element.name == 'li':
+                    texto = element.get_text().strip()
+                    if texto:
+                        nuevo_doc.add_paragraph(texto, style='List Bullet')
+                        
+                elif element.name == 'img':
+                    src = element.get('src', '')
+                    if src.startswith('data:image'):
+                        head, encoded = src.split(",", 1)
+                        img_data = base64.b64decode(encoded)
+                        img_stream = io.BytesIO(img_data)
+                        nuevo_doc.add_picture(img_stream)
+            except Exception as e:
+                print(f"Error procesando un elemento para el DOCX: {e}")
+                    
+        nuevo_doc.save(ruta_archivo)
+        print("¡Éxito! Archivo DOCX físico sobrescrito.")
+    except Exception as e:
+        print(f"Error crítico al reescribir DOCX: {e}")
 
 @app.post("/importar/")
 async def importar_documento(file: UploadFile = File(...), db: Session = Depends(get_db)):
@@ -78,15 +117,24 @@ async def importar_documento(file: UploadFile = File(...), db: Session = Depends
 
     texto_extraido = ""
     excel_grid = []
+    docx_html_preview = ""
     extension = file.filename.split(".")[-1].lower()
 
     try:
         if extension == "pdf":
             reader = PdfReader(ruta_guardado)
             texto_extraido = "\n".join([page.extract_text() or "" for page in reader.pages])
-        elif extension in ["doc", "docx"]:
-            doc = docx.Document(ruta_guardado)
-            texto_extraido = "\n".join([p.text for p in doc.paragraphs])
+        
+        elif extension in ["doc", "docx"]: 
+            with open(ruta_guardado, "rb") as docx_file:
+                result = mammoth.convert_to_html(docx_file)
+                html_contenido = result.value 
+                
+                docx_file.seek(0)
+                
+                texto_extraido = mammoth.extract_raw_text(docx_file).value
+                docx_html_preview = html_contenido
+                
         elif extension in ["xls", "xlsx"]:
             wb = openpyxl.load_workbook(ruta_guardado, data_only=True)
             for sheet in wb.worksheets:
@@ -117,7 +165,7 @@ async def importar_documento(file: UploadFile = File(...), db: Session = Depends
         texto_extraido = f"Error: {e}"
 
     categoria = categorizar_con_ia(texto_extraido)
-    metadatos = {"extension": extension, "categoria": categoria, "excel_grid": excel_grid}
+    metadatos = {"extension": extension, "categoria": categoria, "excel_grid": excel_grid, "html_preview": docx_html_preview}
     
     nuevo_doc = Documento(
         nombre_archivo=file.filename,
@@ -136,6 +184,11 @@ async def actualizar_documento(doc_id: int, payload: dict, db: Session = Depends
     doc = db.query(Documento).filter(Documento.id == doc_id).first()
     m = json.loads(doc.metadatos)
     
+    if "html_preview" in payload:
+        m["html_preview"] = payload["html_preview"]
+        if m.get("extension", "").lower() in ["doc", "docx"]:
+            reconstruir_docx(payload["html_preview"], doc.ruta_archivo)
+
     if "excel_grid" in payload:
         m["excel_grid"] = payload["excel_grid"]
         nuevo_texto = ""
@@ -195,6 +248,7 @@ def buscar_y_navegar(query: str = None, categoria: str = None, skip: int = 0, li
                 else:
                     frags.append(clean_o[start:end])
                     last_end = end
+        fecha_str = d.fecha_subida.strftime("%d/%m/%Y") if d.fecha_subida else "Desconocida"
                 
         final.append({
             "id": d.id, 
@@ -203,7 +257,8 @@ def buscar_y_navegar(query: str = None, categoria: str = None, skip: int = 0, li
             "fragmentos": frags, 
             "coincidencias": len(matches), 
             "texto_completo": d.contenido_texto,
-            "autor": d.propietario.username if d.propietario else "Sistema"
+            "autor": d.propietario.username if d.propietario else "Sistema",
+            "fecha": fecha_str
         })
         
     return {"total_encontrados": consulta.count(), "resultados": final}
