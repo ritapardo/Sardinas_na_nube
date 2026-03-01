@@ -1,0 +1,34 @@
+Este Código de Conducta aplica a todos los participantes del proyecto (desarrolladores, usuarios, colaboradores, proveedores y terceros).
+
+1. Principios:
+  Nos comprometemos a mantener un entorno:
+    · Profesional, respetuoso y libre de acoso.
+    · Orientado a calidad técnica y rigor profesional.
+    · Alineado con el uso ético de la tecnología y la IA.
+
+2. Comportamientos Esperados:
+    · Comunicación clara, respetuosa y profesional.
+    · Uso responsable del software y de los datos.
+    · Cumplimiento de leyes aplicables (protección de datos, propiedad intelectual, IA, etc.).
+    · Reporte responsable de errores y vulnerabilidades.
+
+3. Comportamientos Inaceptables:
+    · Acoso, discriminación o intimidación de cualquier tipo.
+    · Uso del software para actividades ilegales o no éticas.
+    · Intentos de evasión de licencias o restricciones técnicas.
+    · Uso comercial no autorizado.
+    · Extracción o reventa de modelos, datos o funcionalidades.
+
+4. Cumplimiento:
+  Los mantenedores del proyecto pueden:
+    · Eliminar contribuciones.
+    · Revocar acceso.
+    · Bloquear usuarios.
+    · Emprender acciones legales si procede.
+
+5. Alcance:
+  Este Código aplica a:
+    · Repositorios.
+    · Issues y Pull Requests.
+    · Canales de comunicación.
+    · Uso del software en producción.
