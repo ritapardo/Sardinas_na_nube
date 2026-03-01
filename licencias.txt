@@ -1,1 +1,77 @@
+Política de Licencias del Proyecto.
+1. Introducción.
+  El presente documento describe el régimen de licencias aplicable al software que compone este proyecto, el cual está formado por un backend de procesamiento y servicios y un frontend de interfaz de usuario.
+  El objetivo principal del esquema de licenciamiento adoptado es proteger la propiedad intelectual, evitar usos no autorizados, impedir la apropiación propietaria del sistema y garantizar la transparencia del software, especialmente en entornos corporativos y de servicios basados en IA.
 
+  El proyecto adopta licencias copyleft fuertes, diseñadas para asegurar que cualquier uso, modificación o redistribución del software mantenga las mismas libertades y obligaciones legales.
+
+2. Licencia del Backend (Servidor y API).
+  El backend del sistema, desarrollado en Python y ejecutado como servicio web, se distribuye bajo la GNU Affero General Public License v3 (AGPL-3.0).
+
+  2.1 Justificación de la AGPL-3.0.
+    La AGPL-3.0 es una de las licencias de software libre más restrictivas disponibles y ha sido seleccionada deliberadamente para evitar los siguientes escenarios:
+      · Uso del software como servicio (SaaS) sin publicación del código fuente.
+      · Integración del backend en plataformas propietarias o cerradas.
+      · Modificaciones privadas que no se devuelvan a la comunidad o al titular del proyecto.
+      · A diferencia de otras licencias copyleft, la AGPL-3.0 extiende la obligación de liberar el código fuente incluso cuando el software se utiliza exclusivamente a través de una red, garantizando así transparencia total en entornos cloud y empresariales.
+
+  2.2 Obligaciones Principales
+    Cualquier entidad o persona que:
+      · Ejecute el backend,
+      · Lo modifique,
+      · Lo ofrezca como servicio,
+      · O lo integre con otros sistemas,
+
+    está obligada a:
+      · Publicar el código fuente completo de la versión en uso.
+      · Mantener la licencia AGPL-3.0 sin excepciones.
+      · Incluir avisos de copyright y licencia originales.
+      · Proporcionar acceso al código a todos los usuarios del servicio.
+      · El incumplimiento de estas obligaciones supone la terminación automática de la licencia.
+
+3. Licencia del Frontend (Interfaz de Usuario).
+  El frontend del sistema, desarrollado con Vue.js, se distribuye bajo la GNU General Public License v3 (GPL-3.0).
+
+  3.1 Alcance de la GPL-3.0.
+    La GPL-3.0 garantiza que cualquier redistribución del frontend, ya sea modificada o no, debe realizarse bajo la misma licencia, impidiendo su inclusión en productos propietarios o de código cerrado.
+    Esta licencia protege especialmente contra:
+      · White-labeling comercial no autorizado.
+      · Integración en aplicaciones cerradas.
+      · Distribución sin acceso al código fuente.
+
+  3.2 Obligaciones Principales.
+    Los usuarios del frontend deben:
+      · Distribuir siempre el código fuente junto al binario o build final.
+      · Conservar la licencia GPL-3.0 en cualquier derivado.
+      · No imponer restricciones adicionales a terceros.
+      · Respetar las cláusulas anti-tivoización incluidas en la licencia.
+
+4. Relación entre Backend y Frontend.
+  El uso combinado del backend (AGPL-3.0) y el frontend (GPL-3.0) establece un modelo de protección integral, donde:
+    · El backend no puede explotarse como servicio propietario.
+    · El frontend no puede redistribuirse como aplicación cerrada.
+    · Cualquier solución derivada del sistema completo queda sujeta a obligaciones de publicación del código.
+    · Este enfoque es especialmente adecuado para:
+        · Plataformas documentales.
+        · Sistemas corporativos.
+        · Soluciones de IA.
+        · Aplicaciones cloud con procesamiento sensible.
+
+5. Uso Comercial y Licencias Alternativas.
+  Salvo autorización expresa y por escrito del titular del proyecto:
+    · No se permite el uso comercial propietario.
+    · No se permite la reventa del software o de servicios derivados.
+    · No se permite el empaquetado del sistema como producto cerrado.
+  El titular del proyecto se reserva el derecho de ofrecer licencias comerciales alternativas (dual licensing) para organizaciones que requieran:
+    · Uso propietario.
+    · Integración cerrada.
+    · Exenciones de copyleft.
+
+6. Conclusión
+  El régimen de licencias adoptado prioriza:
+    · Transparencia.
+    · Protección legal.
+    · Control del uso del software.
+    · Prevención de apropiación indebida.
+
+Cualquier uso del proyecto implica la aceptación plena de los términos aquí descritos y de las licencias correspondientes.
