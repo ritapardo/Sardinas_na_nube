@@ -116,7 +116,7 @@ Esto permite revisar documentos sin leerlos completamente.
 El frontend actúa como la capa de interacción entre el usuario y el sistema inteligente. Su objetivo no es procesar información compleja, sino permitir que el usuario utilice la inteligencia del backend de forma natural.
 
 <p align="center">
-  <img src="docs/img/imagen_general.png" width="800">
+  <img src="docs/img/imagen_final.png" width="800">
 </p>
 
 ---
@@ -321,3 +321,4 @@ Sardinas na Nube demuestra cómo integrar modelos de lenguaje en software empres
 Más que guardar documentos:
 
 > Los entiende.
+
