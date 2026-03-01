@@ -25,7 +25,7 @@ MODELO_RAPIDO = "llama-3.1-8b-instant"
 MODELO_PRO = "llama-3.3-70b-versatile" 
 MODELO_VISION = "llama-3.2-11b-vision-preview"
 
-client_ai = Groq(api_key="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")
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -316,4 +316,5 @@ async def eliminar_documento(doc_id: int, db: Session = Depends(get_db)):
     doc = db.query(Documento).filter(Documento.id == doc_id).first()
     if os.path.exists(doc.ruta_archivo): os.remove(doc.ruta_archivo)
     db.delete(doc); db.commit()
+
     return {"mensaje": "OK"}
