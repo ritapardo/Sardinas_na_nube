@@ -100,7 +100,7 @@ const subirDocumento = async () => {
 const eliminarDocumento = async (id) => { if(confirm("¿Eliminar?")) { await fetch(`${API_URL}/documentos/${id}`, {method:'DELETE'}); buscarDocumentos() } }
 
 const generarResumen = async (id) => {
-  resumienDocId.value = id; resumenTexto.value = "🤖 Analizando..."; cargandoResumen.value = true
+  resumienDocId.value = id; resumenTexto.value = "Analizando..."; cargandoResumen.value = true
   const res = await fetch(`${API_URL}/documentos/${id}/resumir`); const data = await res.json()
   resumenTexto.value = data.resumen; cargandoResumen.value = false
 }
@@ -151,13 +151,15 @@ onMounted(() => buscarDocumentos())
           <div v-for="doc in documentos" :key="doc.id" class="bg-white p-6 rounded-3xl shadow-sm border hover:shadow-lg transition-all tarjeta-documento">
             <div class="flex flex-col md:flex-row md:items-center gap-3 mb-6">
               <div class="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-black shrink-0 shadow-md" 
-                   :class="{'bg-red-500': doc.metadatos.extension.toLowerCase().includes('pdf'), 'bg-blue-500': doc.metadatos.extension.toLowerCase().includes('doc'), 'bg-green-500': doc.metadatos.extension.toLowerCase().includes('xls'), 'bg-orange-500': ['jpg','png','jpeg'].some(ext => doc.metadatos.extension.toLowerCase().includes(ext)), 'bg-gray-700': true}">
+                   :class="{'bg-red-500': doc.metadatos.extension.toLowerCase().includes('pdf'), 'bg-blue-500': doc.metadatos.extension.toLowerCase().includes('doc'), 'bg-green-500': doc.metadatos.extension.toLowerCase().includes('xls'), 'bg-orange-500': ['jpg','png','jpeg'].some(ext => doc.metadatos.extension.toLowerCase().includes(ext)), 'bg-gray-600': ['txt', 'md', 'json', 'py', 'js', 'csv'].includes(doc.metadatos.extension), 'bg-gray-700': true}">
                 <span class="text-xs uppercase">{{ doc.metadatos.extension }}</span>
               </div>
               <div class="flex-1 min-w-0 pr-10 text-left">
                 <h3 class="font-bold text-xl hover:text-blue-600 cursor-pointer" @click="abrirLector(doc)">{{ doc.nombre_archivo }}</h3>
                 <div class="flex items-center gap-3 mt-2">
                     <span class="text-[9px] font-black uppercase text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100 shadow-sm">{{ doc.metadatos.categoria }}</span>
+                    <span class="text-[10px] text-gray-500 font-bold flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/></svg> {{ doc.autor }}</span>
                     <span class="text-[10px] text-gray-400 font-bold italic">Coincidencias: {{ doc.coincidencias }}</span>
                 </div>
               </div>
@@ -232,11 +234,7 @@ onMounted(() => buscarDocumentos())
               <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Vista Previa Original</p>
               <div class="flex-1 bg-white rounded-3xl border border-gray-200 shadow-inner overflow-hidden relative">
                   
-                  <iframe v-if="docEnEdicion.metadatos.extension.toLowerCase().includes('doc')" 
-                    :src="`https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(API_URL + '/uploads/' + docEnEdicion.nombre_archivo)}`" 
-                    class="w-full h-full border-none"></iframe>
-
-                  <div v-else-if="docEnEdicion.metadatos.extension.toLowerCase().includes('xls')" class="w-full h-full overflow-auto p-4 bg-gray-100/30">
+                  <div v-if="docEnEdicion.metadatos.extension.toLowerCase().includes('xls')" class="w-full h-full overflow-auto p-4 bg-gray-100/30">
                       <template v-if="docEnEdicion.metadatos.excel_grid && docEnEdicion.metadatos.excel_grid.length > 0">
                           <div v-for="(hoja, hIndex) in docEnEdicion.metadatos.excel_grid" :key="hIndex" class="mb-8">
                               <h4 class="font-bold text-blue-700 text-xs mb-3 uppercase tracking-widest bg-blue-100 inline-block px-3 py-1 rounded-lg border border-blue-200">
@@ -262,9 +260,13 @@ onMounted(() => buscarDocumentos())
                       <img :src="`${API_URL}/uploads/${docEnEdicion.nombre_archivo}`" class="max-w-full max-h-full object-contain shadow-2xl rounded-2xl border border-gray-200" />
                   </div>
 
-                  <div v-else class="w-full h-full flex flex-col items-center justify-center text-gray-400 italic font-medium bg-gray-50 text-center px-8">
-                      <p class="text-lg text-gray-500 mb-2">Vista nativa no disponible</p>
-                      <p class="text-xs">Usa el panel de la derecha para ver el texto que la IA ha indexado.</p>
+                  <div v-else class="w-full h-full p-8 overflow-y-auto flex justify-center bg-gray-100/30">
+                      <div class="bg-white shadow-xl w-full max-w-2xl min-h-full p-12 font-serif text-gray-800 whitespace-pre-wrap text-sm leading-relaxed relative">
+                          <div v-if="docEnEdicion.metadatos.extension.toLowerCase().includes('doc')" class="mb-6 p-4 bg-yellow-50 text-yellow-800 text-xs rounded-xl border border-yellow-200">
+                              ⚠️ <b>Aviso:</b> Estás en desarrollo local. Viendo el texto base extraído del Word.
+                          </div>
+                          {{ docEnEdicion.texto_completo || 'Este documento parece estar vacío o es ilegible.' }}
+                      </div>
                   </div>
               </div>
             </div>

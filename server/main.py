@@ -44,15 +44,25 @@ def normalizar_texto(texto: str) -> str:
 def categorizar_con_ia(texto: str) -> str:
     if not texto or len(texto) < 10: return "General"
     try:
-        prompt = f"Eres un clasificador corporativo. Clasifica el siguiente texto OBLIGATORIAMENTE en una sola palabra de esta lista: Finanzas, Legal, RRHH, Proyectos, Charlas, General. Solo responde la palabra.\n\nTexto: {texto[:1000]}"
+        prompt = f"Clasifica el siguiente texto OBLIGATORIAMENTE en UNA SOLA PALABRA de esta lista exacta: Finanzas, Legal, RRHH, Proyectos, Charlas, General. NO des explicaciones. NO uses signos de puntuación. Solo la palabra.\n\nTexto:\n{texto[:1500]}"
+        
         res = client_ai.chat.completions.create(
             messages=[{"role": "user", "content": prompt}], 
             model=MODELO_RAPIDO,
             temperature=0.0
         )
-        cat = res.choices[0].message.content.strip().title().replace(".", "")
-        return cat if cat in ["Finanzas", "Legal", "Rrhh", "Proyectos", "Charlas", "General"] else "General"
-    except: return "General"
+        
+        cat_raw = res.choices[0].message.content.strip().upper()
+        
+        if "FINANZAS" in cat_raw: return "Finanzas"
+        if "LEGAL" in cat_raw: return "Legal"
+        if "RRHH" in cat_raw: return "RRHH"
+        if "PROYECTOS" in cat_raw: return "Proyectos"
+        if "CHARLAS" in cat_raw: return "Charlas"
+        
+        return "General"
+    except: 
+        return "General"
 
 @app.post("/importar/")
 async def importar_documento(file: UploadFile = File(...), db: Session = Depends(get_db)):
@@ -87,6 +97,15 @@ async def importar_documento(file: UploadFile = File(...), db: Session = Depends
                         filas.append(fila_str)
                         texto_extraido += " | ".join(fila_str) + "\n"
                 excel_grid.append({"hoja": sheet.title, "filas": filas})
+        elif extension in ["txt", "md", "csv", "json", "py", "js", "html", "css"]:
+            try:
+                texto_extraido = contenido_binario.decode('utf-8')
+                
+                if extension == "csv":
+                    texto_extraido = texto_extraido.replace(",", " | ")
+                
+            except UnicodeDecodeError:
+                texto_extraido = contenido_binario.decode('latin-1', errors='ignore')
         elif extension in ["jpg", "jpeg", "png"]:
             b64_img = base64.b64encode(contenido_binario).decode('utf-8')
             res_v = client_ai.chat.completions.create(
@@ -183,7 +202,8 @@ def buscar_y_navegar(query: str = None, categoria: str = None, skip: int = 0, li
             "metadatos": m, 
             "fragmentos": frags, 
             "coincidencias": len(matches), 
-            "texto_completo": d.contenido_texto
+            "texto_completo": d.contenido_texto,
+            "autor": d.propietario.username if d.propietario else "Sistema"
         })
         
     return {"total_encontrados": consulta.count(), "resultados": final}
@@ -191,7 +211,44 @@ def buscar_y_navegar(query: str = None, categoria: str = None, skip: int = 0, li
 @app.get("/documentos/{doc_id}/resumir")
 async def resumir_documento(doc_id: int, db: Session = Depends(get_db)):
     doc = db.query(Documento).filter(Documento.id == doc_id).first()
-    res = client_ai.chat.completions.create(messages=[{"role": "user", "content": f"Resume este documento en 3 puntos con emojis:\n{doc.contenido_texto[:3000]}"}], model=MODELO_PRO)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+    
+    metadatos = json.loads(doc.metadatos)
+    ext = metadatos.get("extension", "").lower()
+
+    if ext in ["py", "js", "html", "css", "json"]:
+        contexto_ia = (
+            f"Analiza este archivo de CÓDIGO o CONFIGURACIÓN (.{ext}). "
+            "Explica: 1. Su propósito principal. 2. Las tecnologías o estructuras que usa. "
+            "3. Una breve conclusión técnica. Usa emojis técnicos como 💻, ⚙️ o 🚀."
+        )
+    elif ext in ["csv", "xlsx", "xls"]:
+        contexto_ia = (
+            "Analiza estos DATOS o TABLA. Resume de qué trata el conjunto de datos, "
+            "qué columnas o información relevante contiene y una conclusión de los datos. "
+            "Usa emojis como 📊, 📈 o 📁."
+        )
+    else:
+        contexto_ia = (
+            "Resume este DOCUMENTO CORPORATIVO en 3 puntos clave de forma ejecutiva. "
+            "Usa emojis relevantes según el contenido (⚖️, 💰, 📅, etc.)."
+        )
+
+    res = client_ai.chat.completions.create(
+        messages=[
+            {
+                "role": "system", 
+                "content": "Eres un experto en análisis de documentos y código técnico. Tu objetivo es ser breve y preciso."
+            },
+            {
+                "role": "user", 
+                "content": f"{contexto_ia}\n\nContenido del archivo:\n{doc.contenido_texto[:3500]}"
+            }
+        ], 
+        model=MODELO_PRO
+    )
+    
     return {"resumen": res.choices[0].message.content}
 
 @app.get("/documentos/{doc_id}/descargar")
