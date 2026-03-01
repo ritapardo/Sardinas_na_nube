@@ -10,7 +10,6 @@ const categoriaSeleccionada = ref('Todas')
 const archivoSeleccionado = ref(null)
 const subiendo = ref(false)
 
-// --- ESTADO MODAL ---
 const modalVisible = ref(false)
 const docEnEdicion = ref(null)
 const modoEdicion = ref(false)
@@ -23,6 +22,7 @@ const API_URL = 'http://127.0.0.1:8000'
 
 const carpetas = [
   { nombre: 'Todas', color: 'bg-blue-100 text-blue-600', svg: '<path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />' },
+  { nombre: 'General', color: 'bg-cyan-100 text-cyan-600', svg: '<path d="M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm4 4h8m-8 4h8" />' },
   { nombre: 'Finanzas', color: 'bg-green-100 text-green-600', svg: '<path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />' },
   { nombre: 'Legal', color: 'bg-red-100 text-red-600', svg: '<path d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 01-6.001 0M18 7l-3 9m3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />' },
   { nombre: 'RRHH', color: 'bg-orange-100 text-orange-600', svg: '<path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />' },
@@ -33,27 +33,49 @@ const carpetas = [
 const buscarDocumentos = async (reset = false) => {
   if (reset) paginaActual.value = 1
   const skip = (paginaActual.value - 1) * limite
-  let url = `${API_URL}/documentos/?skip=${skip}&limit=${limite}`
+  let url = `${API_URL}/documentos/?skip=${skip}&limit=${limite}&_t=${Date.now()}`
   if (queryBusqueda.value) url += `&query=${encodeURIComponent(queryBusqueda.value)}`
   if (categoriaSeleccionada.value !== 'Todas') url += `&categoria=${encodeURIComponent(categoriaSeleccionada.value)}`
-  const res = await fetch(url); const data = await res.json()
-  documentos.value = data.resultados; totalEncontrados.value = data.total_encontrados
-  documentos.value.forEach(doc => { if(!fragmentosVisibles.value[doc.id]) fragmentosVisibles.value[doc.id] = 5 })
+  
+  const res = await fetch(url); 
+  const data = await res.json();
+  documentos.value = data.resultados;
+  totalEncontrados.value = data.total_encontrados;
+  
+  documentos.value.forEach(doc => {
+    if (fragmentosVisibles.value[doc.id] === undefined) {
+      fragmentosVisibles.value[doc.id] = 5;
+    }
+  });
 }
 
 let tId = null
 watch(queryBusqueda, () => { clearTimeout(tId); tId = setTimeout(() => buscarDocumentos(true), 350) })
 
-const abrirLector = (doc) => { docEnEdicion.value = { ...doc }; modalVisible.value = true; modoEdicion.value = false }
+const abrirLector = (doc) => { 
+  docEnEdicion.value = JSON.parse(JSON.stringify(doc)); 
+  modalVisible.value = true; 
+  modoEdicion.value = false;
+}
 
 const guardarCambios = async () => {
+  const payload = {
+    nombre_archivo: docEnEdicion.value.nombre_archivo,
+    contenido_texto: docEnEdicion.value.texto_completo
+  };
+
+  if (docEnEdicion.value.metadatos.extension.toLowerCase().includes('xls') && docEnEdicion.value.metadatos.excel_grid) {
+    payload.excel_grid = docEnEdicion.value.metadatos.excel_grid;
+  }
+
   const res = await fetch(`${API_URL}/documentos/${docEnEdicion.value.id}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nombre_archivo: docEnEdicion.value.nombre_archivo, contenido_texto: docEnEdicion.value.texto_completo })
-  })
+    body: JSON.stringify(payload)
+  });
+
   if (res.ok) {
-    const data = await res.json(); alert(`Guardado. Categoría IA: ${data.nueva_categoria}`)
-    modalVisible.value = false; buscarDocumentos()
+    const data = await res.json(); alert(`Guardado. Categoría IA: ${data.nueva_categoria}`);
+    modalVisible.value = false; buscarDocumentos(true);
   }
 }
 
@@ -91,7 +113,7 @@ onMounted(() => buscarDocumentos())
 
 <template>
   <div class="min-h-screen bg-gray-50 p-4 md:p-8 font-sans text-gray-900 leading-tight">
-    <div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-8">
+    <div class="w-full mx-auto grid grid-cols-1 lg:grid-cols-4 gap-8">
       
       <aside class="space-y-6">
         <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-200 sticky top-8">
@@ -118,7 +140,7 @@ onMounted(() => buscarDocumentos())
           <div class="bg-gray-100 text-gray-400 px-4 py-3 rounded-2xl text-[10px] font-black flex items-center shadow-inner">LIVE</div>
         </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
           <button v-for="f in carpetas" :key="f.nombre" @click="seleccionarCarpeta(f.nombre)" :class="[ 'p-4 rounded-2xl border-2 transition-all transform hover:-translate-y-1 flex flex-col items-center group', categoriaSeleccionada === f.nombre ? 'border-blue-500 bg-white shadow-md' : 'border-transparent bg-white/60 hover:bg-white' ]">
             <div :class="['w-12 h-12 rounded-2xl flex items-center justify-center mb-3 shadow-sm transition-transform group-hover:scale-110', f.color]"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" v-html="f.svg"></svg></div>
             <p class="text-[11px] font-black uppercase tracking-widest text-gray-800">{{ f.nombre }}</p>
@@ -127,35 +149,50 @@ onMounted(() => buscarDocumentos())
 
         <div class="space-y-6">
           <div v-for="doc in documentos" :key="doc.id" class="bg-white p-6 rounded-3xl shadow-sm border hover:shadow-lg transition-all tarjeta-documento">
-            <div class="flex flex-col md:flex-row md:items-center gap-6 mb-6">
+            <div class="flex flex-col md:flex-row md:items-center gap-3 mb-6">
               <div class="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-black shrink-0 shadow-md" 
-                   :class="{'bg-red-500': doc.metadatos.extension==='pdf', 'bg-blue-500': doc.metadatos.extension.includes('doc'), 'bg-green-500': doc.metadatos.extension.includes('xls'), 'bg-orange-500': ['jpg','png','jpeg'].includes(doc.metadatos.extension), 'bg-gray-700': true}">
+                   :class="{'bg-red-500': doc.metadatos.extension.toLowerCase().includes('pdf'), 'bg-blue-500': doc.metadatos.extension.toLowerCase().includes('doc'), 'bg-green-500': doc.metadatos.extension.toLowerCase().includes('xls'), 'bg-orange-500': ['jpg','png','jpeg'].some(ext => doc.metadatos.extension.toLowerCase().includes(ext)), 'bg-gray-700': true}">
                 <span class="text-xs uppercase">{{ doc.metadatos.extension }}</span>
               </div>
-              <div class="flex-1 min-w-0 pr-10">
-                <h3 class="font-bold text-xl truncate hover:text-blue-600 cursor-pointer" @click="abrirLector(doc)">{{ doc.nombre_archivo }}</h3>
+              <div class="flex-1 min-w-0 pr-10 text-left">
+                <h3 class="font-bold text-xl hover:text-blue-600 cursor-pointer" @click="abrirLector(doc)">{{ doc.nombre_archivo }}</h3>
                 <div class="flex items-center gap-3 mt-2">
                     <span class="text-[9px] font-black uppercase text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100 shadow-sm">{{ doc.metadatos.categoria }}</span>
-                    <span class="text-[10px] text-gray-400 font-bold italic">Matches: {{ doc.coincidencias }}</span>
+                    <span class="text-[10px] text-gray-400 font-bold italic">Coincidencias: {{ doc.coincidencias }}</span>
                 </div>
               </div>
               <div class="flex gap-2">
                 <button @click="abrirLector(doc)" class="p-3 bg-gray-50 text-gray-600 rounded-2xl hover:bg-gray-200 transition-colors" title="Ver / Editar"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg></button>
-                <button @click="descargarArchivo(doc.id)" class="p-3 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-100 transition-colors" title="Descargar"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4-4m4 4V4"/></svg></button>
+                <button @click="descargarArchivo(doc.id)" class="p-3 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-100 transition-colors" title="Descargar"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="m12 16l-5-5l1.4-1.45l2.6 2.6V4h2v8.15l2.6-2.6L17 11zm-6 4q-.825 0-1.412-.587T4 18v-3h2v3h12v-3h2v3q0 .825-.587 1.413T18 20z"/></svg></button>
                 <button @click="generarResumen(doc.id)" class="px-5 py-3 bg-purple-50 text-purple-600 rounded-2xl font-bold text-xs hover:bg-purple-100 flex items-center gap-2 border border-purple-100 shadow-sm transition-all">
                     <span v-if="cargandoResumen && resumienDocId === doc.id" class="animate-spin w-3 h-3 border-2 border-purple-600 border-t-transparent rounded-full"></span>
-                    ✨ IA
+                    Resumen IA
                 </button>
                 <button @click="eliminarDocumento(doc.id)" class="p-3 bg-red-50 text-red-400 rounded-2xl hover:bg-red-100 transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
               </div>
             </div>
 
             <div v-if="doc.fragmentos.length > 0" class="space-y-4 bg-gray-50 p-6 rounded-2xl border-l-4 border-blue-500 mb-6 shadow-inner">
-              <div v-for="(f, i) in doc.fragmentos.slice(0, fragmentosVisibles[doc.id])" :key="i" class="text-sm italic text-gray-700 leading-relaxed border-b border-gray-200 last:border-0 pb-3" v-html="'... ' + resaltarBusqueda(f, queryBusqueda) + ' ...'"></div>
-              <button v-if="doc.coincidencias > fragmentosVisibles[doc.id]" @click="fragmentosVisibles[doc.id]+=10" class="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:translate-x-1 transition-transform">Ver más coincidencias ↓</button>
+              <div v-for="(f, i) in doc.fragmentos.slice(0, fragmentosVisibles[doc.id])" 
+                :key="i" 
+                class="text-sm italic text-gray-700 leading-relaxed border-b border-gray-200 last:border-0 pb-3" 
+                v-html="'... ' + resaltarBusqueda(f, queryBusqueda) + ' ...'">
+              </div>
+
+              <div class="flex justify-between items-center pt-2">
+                <button v-if="doc.fragmentos.length > fragmentosVisibles[doc.id]" 
+                  @click="fragmentosVisibles[doc.id] += 10" 
+                  class="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 transition-colors">
+                Mostrar más coincidencias (+{{ Math.min(10, doc.fragmentos.length - fragmentosVisibles[doc.id]) }}) ↓
+                </button>
+    
+                <span class="text-[9px] font-bold text-gray-400 uppercase">
+                  Viendo {{ Math.min(fragmentosVisibles[doc.id], doc.fragmentos.length) }} de {{ doc.fragmentos.length }}
+                </span>
+              </div>
             </div>
 
-            <div v-if="resumienDocId === doc.id" class="p-6 bg-gradient-to-br from-purple-50 to-white rounded-2xl border border-purple-100 shadow-inner">
+            <div v-if="resumienDocId === doc.id" class="p-6 bg-gradient-to-br from-purple-50 to-white rounded-2xl border border-purple-100 shadow-inner mt-4">
                 <p class="text-sm text-purple-900 leading-loose whitespace-pre-wrap font-medium">{{ resumenTexto }}</p>
             </div>
           </div>
@@ -168,78 +205,94 @@ onMounted(() => buscarDocumentos())
         
         <div class="p-8 border-b flex justify-between items-center bg-white shrink-0 shadow-sm">
           <div class="flex items-center gap-6 flex-1 pr-10">
-            <div class="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg font-black text-xs uppercase">{{ docEnEdicion.metadatos.extension }}</div>
+            <div class="w-12 h-12 rounded-2xl text-white flex items-center justify-center shadow-lg font-black text-xs uppercase"
+                 :class="{'bg-red-500': docEnEdicion.metadatos.extension.toLowerCase().includes('pdf'), 'bg-blue-500': docEnEdicion.metadatos.extension.toLowerCase().includes('doc'), 'bg-green-500': docEnEdicion.metadatos.extension.toLowerCase().includes('xls'), 'bg-orange-500': ['jpg','png','jpeg'].some(ext => docEnEdicion.metadatos.extension.toLowerCase().includes(ext)), 'bg-blue-600': true}">
+              {{ docEnEdicion.metadatos.extension }}
+            </div>
             <input v-model="docEnEdicion.nombre_archivo" class="text-2xl font-black border-b-2 border-transparent focus:border-blue-500 outline-none w-full max-w-lg bg-transparent" />
           </div>
           <div class="flex gap-3">
-            <button @click="guardarCambios" class="bg-blue-600 text-white px-8 py-3 rounded-2xl font-bold hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-100 uppercase text-[10px] tracking-widest">Guardar e Indexar</button>
-            <button @click="modalVisible = false" class="bg-gray-100 text-gray-500 p-3 rounded-2xl hover:bg-gray-200 transition-all"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+            <button v-if="!docEnEdicion.metadatos.extension.toLowerCase().includes('pdf')" @click="guardarCambios" class="bg-blue-600 text-white px-8 py-3 rounded-2xl font-bold hover:bg-blue-700 active:scale-95 transition-all shadow-lg uppercase text-[10px] tracking-widest">
+              Guardar e Indexar
+            </button>
+            <button @click="modalVisible = false" class="bg-gray-100 text-gray-500 p-3 rounded-2xl hover:bg-gray-200 transition-all">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
           </div>
         </div>
 
         <div class="flex-1 flex overflow-hidden bg-gray-50">
           
-          <div class="w-1/2 border-r border-gray-200 p-6 flex flex-col">
-            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Vista Previa Original</p>
-            <div class="flex-1 bg-white rounded-3xl border border-gray-200 shadow-inner overflow-hidden relative">
-                
-                <iframe v-if="docEnEdicion.metadatos.extension === 'pdf'" 
-                        :src="`${API_URL}/uploads/${docEnEdicion.nombre_archivo}`" 
-                        class="w-full h-full border-none"></iframe>
-
-                <div v-else-if="docEnEdicion.metadatos.extension.includes('xls')" class="w-full h-full overflow-auto p-4 bg-gray-100/30">
-                    <template v-if="docEnEdicion.metadatos.excel_grid && docEnEdicion.metadatos.excel_grid.length > 0">
-                        <div v-for="(hoja, hIndex) in docEnEdicion.metadatos.excel_grid" :key="hIndex" class="mb-8">
-                            <h4 class="font-bold text-blue-700 text-xs mb-3 uppercase tracking-widest bg-blue-100 inline-block px-3 py-1 rounded-lg border border-blue-200">
-                                Hoja: {{ hoja.hoja || 'Desconocida' }}
-                            </h4>
-                            <div class="overflow-x-auto border border-gray-200 rounded-xl shadow-sm">
-                                <table class="min-w-full text-[10px] font-mono border-collapse bg-white">
-                                    <tbody>
-                                        <tr v-for="(row, i) in hoja.filas" :key="i" class="border-b border-gray-100 hover:bg-blue-50/50 transition-colors">
-                                            <td v-for="(cell, j) in row" :key="j" class="border-r border-gray-100 px-4 py-2 min-w-[100px] text-gray-700 whitespace-nowrap">
-                                                {{ cell }}
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </template>
-                    <div v-else class="flex flex-col items-center justify-center h-full text-gray-400 p-8 text-center">
-                        <svg class="w-16 h-16 mb-4 text-red-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                        <p class="font-bold text-gray-600 text-lg">Error de Rejilla</p>
-                        <p class="text-sm mt-2 leading-relaxed">Borra este archivo y vuelve a subirlo para que el sistema procese las celdas correctamente.</p>
-                    </div>
-                </div>
-
-                <div v-else-if="['jpg','jpeg','png'].includes(docEnEdicion.metadatos.extension)" class="w-full h-full flex items-center justify-center p-8 bg-gray-100/50">
-                    <img :src="`${API_URL}/uploads/${docEnEdicion.nombre_archivo}`" class="max-w-full max-h-full object-contain shadow-2xl rounded-2xl border border-gray-200" />
-                </div>
-
-                <div v-else class="w-full h-full flex flex-col items-center justify-center text-gray-400 italic font-medium bg-gray-50 text-center px-8">
-                    <p class="text-lg text-gray-500 mb-2">Vista nativa no disponible</p>
-                    <p class="text-xs">Usa el panel de la derecha para ver el texto que la IA ha indexado.</p>
-                </div>
-
-            </div>
+          <div v-if="docEnEdicion.metadatos.extension.toLowerCase().includes('pdf')" class="w-full h-full p-6">
+            <iframe :src="`${API_URL}/uploads/${docEnEdicion.nombre_archivo}`" class="w-full h-full rounded-3xl border-none shadow-lg bg-white"></iframe>
           </div>
 
-          <div class="w-1/2 p-6 flex flex-col">
-            <div class="flex justify-between items-center mb-4">
-                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Contenido Extraído</p>
-                <button @click="modoEdicion = !modoEdicion" class="text-[10px] font-black text-blue-600 uppercase border border-blue-100 px-4 py-2 rounded-xl hover:bg-blue-50 transition-all shadow-sm">
-                    {{ modoEdicion ? 'Bloquear Edición' : 'Editar Texto' }}
-                </button>
+          <template v-else>
+            <div class="w-1/2 border-r border-gray-200 p-6 flex flex-col">
+              <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Vista Previa Original</p>
+              <div class="flex-1 bg-white rounded-3xl border border-gray-200 shadow-inner overflow-hidden relative">
+                  
+                  <iframe v-if="docEnEdicion.metadatos.extension.toLowerCase().includes('doc')" 
+                    :src="`https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(API_URL + '/uploads/' + docEnEdicion.nombre_archivo)}`" 
+                    class="w-full h-full border-none"></iframe>
+
+                  <div v-else-if="docEnEdicion.metadatos.extension.toLowerCase().includes('xls')" class="w-full h-full overflow-auto p-4 bg-gray-100/30">
+                      <template v-if="docEnEdicion.metadatos.excel_grid && docEnEdicion.metadatos.excel_grid.length > 0">
+                          <div v-for="(hoja, hIndex) in docEnEdicion.metadatos.excel_grid" :key="hIndex" class="mb-8">
+                              <h4 class="font-bold text-blue-700 text-xs mb-3 uppercase tracking-widest bg-blue-100 inline-block px-3 py-1 rounded-lg border border-blue-200">
+                                  Hoja: {{ hoja.hoja || 'Desconocida' }}
+                              </h4>
+                              <div class="overflow-x-auto border border-gray-200 rounded-xl shadow-sm">
+                                  <table class="min-w-full text-[10px] font-mono border-collapse bg-white">
+                                      <tbody>
+                                          <tr v-for="(row, i) in hoja.filas" :key="i" class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                              <td v-for="(cell, j) in row" :key="j" class="border-r border-gray-100 p-0 min-w-[120px] align-top relative">
+                                                <input v-if="modoEdicion" v-model="hoja.filas[i][j]" class="w-full h-full min-h-[40px] px-4 py-2 bg-transparent outline-none focus:bg-blue-50 focus:ring-2 focus:ring-blue-400 text-gray-900 transition-all font-medium" />
+                                                <div v-else class="w-full h-full min-h-[40px] px-4 py-2 whitespace-nowrap text-gray-700">{{ cell }}</div>
+                                              </td>
+                                          </tr>
+                                      </tbody>
+                                  </table>
+                              </div>
+                          </div>
+                      </template>
+                  </div>
+
+                  <div v-else-if="['jpg','jpeg','png'].some(ext => docEnEdicion.metadatos.extension.toLowerCase().includes(ext))" class="w-full h-full flex items-center justify-center p-8 bg-gray-100/50">
+                      <img :src="`${API_URL}/uploads/${docEnEdicion.nombre_archivo}`" class="max-w-full max-h-full object-contain shadow-2xl rounded-2xl border border-gray-200" />
+                  </div>
+
+                  <div v-else class="w-full h-full flex flex-col items-center justify-center text-gray-400 italic font-medium bg-gray-50 text-center px-8">
+                      <p class="text-lg text-gray-500 mb-2">Vista nativa no disponible</p>
+                      <p class="text-xs">Usa el panel de la derecha para ver el texto que la IA ha indexado.</p>
+                  </div>
+              </div>
             </div>
-            <div class="flex-1 bg-white rounded-3xl border border-gray-200 shadow-inner p-8">
-                <textarea v-if="modoEdicion" v-model="docEnEdicion.texto_completo" class="w-full h-full outline-none text-sm font-mono leading-relaxed resize-none bg-transparent text-gray-800"></textarea>
-                <div v-else class="w-full h-full overflow-y-auto text-sm text-gray-600 leading-loose whitespace-pre-wrap font-medium" 
-                     :class="(docEnEdicion.texto_completo || '').includes('ERROR') ? 'text-red-500 font-bold' : ''">
-                    {{ docEnEdicion.texto_completo || 'No se encontró texto.' }}
-                </div>
+
+            <div class="w-1/2 p-6 flex flex-col">
+              <div class="flex justify-between items-center mb-4">
+                  <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Contenido Extraído</p>
+                  <button @click="modoEdicion = !modoEdicion" class="text-[10px] font-black text-blue-600 uppercase border border-blue-100 px-4 py-2 rounded-xl hover:bg-blue-50 transition-all shadow-sm">
+                      {{ modoEdicion ? 'Bloquear Edición' : 'Editar Celdas / Texto' }}
+                  </button>
+              </div>
+              <div class="flex-1 bg-white rounded-3xl border border-gray-200 shadow-inner p-8 overflow-y-auto">
+                  <div v-if="docEnEdicion.metadatos.extension.toLowerCase().includes('xls')" class="w-full h-full text-sm font-mono text-gray-600 leading-relaxed whitespace-pre-wrap">
+                      <template v-for="(hoja, hIdx) in docEnEdicion.metadatos.excel_grid" :key="hIdx">
+                          <p class="text-xs text-gray-400 mt-4 mb-1">--- {{ hoja.hoja }} ---</p>
+                          <div v-for="(fila, fIdx) in hoja.filas" :key="fIdx">
+                              {{ fila.join(' | ') }}
+                          </div>
+                      </template>
+                  </div>
+                  <textarea v-else-if="modoEdicion" v-model="docEnEdicion.texto_completo" class="w-full h-full outline-none text-sm font-mono leading-relaxed resize-none bg-transparent text-gray-800"></textarea>
+                  <div v-else class="w-full h-full text-sm text-gray-600 leading-loose whitespace-pre-wrap font-medium" 
+                       :class="(docEnEdicion.texto_completo || '').includes('ERROR') ? 'text-red-500 font-bold' : ''">
+                      {{ docEnEdicion.texto_completo || 'No se encontró texto.' }}
+                  </div>
+              </div>
             </div>
-          </div>
+          </template>
 
         </div>
       </div>
