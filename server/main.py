@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import SessionLocal, Documento, Usuario, get_db
 from groq import Groq
+from dotenv import load_dotenv
 
 app = FastAPI(title="Sardiñas na Nube Enterprise AI")
 
@@ -25,7 +26,8 @@ MODELO_RAPIDO = "llama-3.1-8b-instant"
 MODELO_PRO = "llama-3.3-70b-versatile" 
 MODELO_VISION = "llama-3.2-11b-vision-preview"
 
-
+load_dotenv()
+client_ai = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 app.add_middleware(
     CORSMiddleware,
